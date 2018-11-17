@@ -1,33 +1,74 @@
 import React, { Component } from 'react';
-import { Tasks } from '../api/tasks.js';
+import PropTypes from 'prop-types';
+import { UserFiles } from '../api/tasks.js';
 
-// Task component - represents a single todo item
-export default class Task extends Component {
-  toggleChecked() {
-     // Set the checked property to the opposite of its current value
-     Tasks.update(this.props.task._id, {
-       $set: { checked: !this.props.task.checked },
-     });
-   }
+class IndividualFile extends Component {
+  constructor(props) {
+    super(props);
 
-   deleteThisTask() {
-     Tasks.remove(this.props.task._id);
-   }
+    this.state = {
+    };
 
+    this.removeFile = this.removeFile.bind(this);
+    this.renameFile = this.renameFile.bind(this);
+
+  }
+
+  propTypes: {
+    fileName: PropTypes.string.isRequired,
+    fileSize: PropTypes.number.isRequired,
+    fileUrl: PropTypes.string,
+    fileId: PropTypes.string.isRequired
+  }
+
+  removeFile(){
+    UserFiles.remove(this.props.fileId);
+    }
+
+  renameFile(){
+
+    let validName = /[^a-zA-Z0-9 \.:\+()\-_%!&]/gi;
+    let prompt    = window.prompt('New file name?', this.props.fileName);
+
+    // Replace any non valid characters, also do this on the server
+    if (prompt) {
+      prompt = prompt.replace(validName, '-');
+      prompt.trim();
+    }
+
+    if (!_.isEmpty(prompt)) {
+      Meteor.call('RenameFile', this.props.fileId, prompt, function (err, res) {
+        if (err)
+          console.log(err);
+      })
+    }
+  }
 
   render() {
-    // Give tasks a different className when they are checked off,
-// so that we can style them nicely in CSS
-const taskClassName = this.props.task.checked ? 'checked' : '';
+    return <div className="m-t-sm">
+      <div className="row">
+        <div className="col-md-12">
 
-return (
-   <li className={taskClassName}>
-     <button className="delete" onClick={this.deleteThisTask.bind(this)}>
-       &times;
-     </button>
+          <a href={this.props.fileUrl} className="btn btn-outline btn-primary btn-sm"
+             target="_blank"><strong>{this.props.fileName}</strong></a>
 
-     <span className="text">{this.props.task.text}</span>
-   </li>
-    );
+          <div className="m-b-sm">
+          </div>
+        </div>
+      </div>
+
+      <div className="row">
+
+
+
+        <div className="col-md-2">
+          <button onClick={this.removeFile} className="btn btn-outline btn-danger btn-sm">
+            Delete
+          </button>
+        </div>
+
+      </div>
+    </div>
   }
 }
+export default IndividualFile;

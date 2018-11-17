@@ -1,58 +1,149 @@
+import { withTracker } from 'meteor/react-meteor-data';
+import { Meteor } from 'meteor/meteor';
 import React, { Component } from 'react';
 import ReactDOM from 'react-dom';
-import { withTracker } from 'meteor/react-meteor-data';
+import PropTypes from 'prop-types';
 
-import { Tasks } from '../api/tasks.js';
-import Task from './Task.js';
+import { UserFiles } from '../api/tasks.js';
+import IndividualFile from './Task.js';
 
-// App component - represents the whole app
+// const debug = require('debug')('demo:file');
+
 class App extends Component {
-// this is for text input
-  handleSubmit(event) {
-  event.preventDefault();
+  constructor(props) {
+    super(props);
 
-  // Find the text field via the React ref
-  const text = ReactDOM.findDOMNode(this.refs.textInput).value.trim();
+    this.state = {
+      uploading: [],
+      progress: 0,
+      inProgress: false
+    };
 
-  Tasks.insert({
-    text,
-    createdAt: new Date(), // current time
-  });
+    this.uploadIt = this.uploadIt.bind(this);
+  }
 
-  // Clear form
-  ReactDOM.findDOMNode(this.refs.textInput).value = '';
-}
-// to here text input
-  renderTasks() {
-    return this.props.tasks.map((task) => (
-      <Task key={task._id} task={task} />
-    ));
+  uploadIt(e) {
+    e.preventDefault();
+
+    let self = this;
+
+    if (e.currentTarget.files && e.currentTarget.files[0]) {
+      // We upload only one file, in case
+      // there was multiple files selected
+      var file = e.currentTarget.files[0];
+
+      if (file) {
+        let uploadInstance = UserFiles.insert({
+          file: file,
+          meta: {
+            locator: self.props.fileLocator,
+          },
+          streams: 'dynamic',
+          chunkSize: 'dynamic',
+          allowWebWorkers: true // If you see issues with uploads, change this to false
+        }, false)
+
+        self.setState({
+          uploading: uploadInstance, // Keep track of this instance to use below
+          inProgress: true // Show the progress bar now
+        });
+
+        // These are the event functions, don't need most of them, it shows where we are in the process
+        uploadInstance.on('start', function () {
+          console.log('Starting');
+        })
+
+        uploadInstance.on('end', function (error, fileObj) {
+          console.log('On end File Object: ', fileObj);
+        })
+
+        uploadInstance.on('uploaded', function (error, fileObj) {
+          console.log('uploaded: ', fileObj);
+
+          // Remove the filename from the upload box
+          self.refs['fileinput'].value = '';
+
+          // Reset our state for the next file
+          self.setState({
+            uploading: [],
+            progress: 0,
+            inProgress: false
+          });
+        })
+
+        uploadInstance.on('error', function (error, fileObj) {
+          console.log('Error during upload: ' + error)
+        });
+
+        uploadInstance.on('progress', function (progress, fileObj) {
+          console.log('Upload Percentage: ' + progress)
+          // Update our progress bar
+          self.setState({
+            progress: progress
+          });
+        });
+
+        uploadInstance.start(); // Must manually start the upload
+      }
+    }
   }
 
   render() {
-    return (
-      <div className="container">
-        <header>
-          <h1>Todo List</h1>
-          <form className="new-task" onSubmit={this.handleSubmit.bind(this)} >
-          <input
-            type="text"
-            ref="textInput"
-            placeholder="Type to add new tasks"
-          />
-        </form>
-        </header>
+//  debug("Rendering FileUpload",this.props.docsReadyYet);
+//  if (this.props.files && this.props.docsReadyYet) {
 
-        <ul>
-          {this.renderTasks()}
-        </ul>
+    let fileCursors = this.props.files;
+
+    // Run through each file that the user has stored
+    // (make sure the subscription only sends files owned by this user)
+    let display = fileCursors.map((aFile, key) => {
+      // console.log('A file: ', aFile.link(), aFile.get('name'))
+      let link = UserFiles.findOne({_id: aFile._id}).link();  //The "view/download" link
+
+      // Send out components that show details of each file
+      return <div key={'file' + key}>
+        <IndividualFile
+          fileName={aFile.name}
+          fileUrl={link}
+          fileId={aFile._id}
+          fileSize={aFile.size}
+        />
       </div>
-    );
+    })
+
+    return <div>
+      <div className="row">
+        <div className="col-md-12">
+          <p>Upload New File:</p>
+          <input type="file" id="fileinput" disabled={this.state.inProgress} ref="fileinput"
+               onChange={this.uploadIt}/>
+        </div>
+      </div>
+
+      <div className="row m-t-sm m-b-sm">
+        <div className="col-md-6">
+
+
+        </div>
+        <div className="col-md-6">
+        </div>
+      </div>
+
+      {display}
+
+    </div>
   }
+//  else return <div>Loading file list</div>;
+//}
 }
 
-export default withTracker(() => {
+export default withTracker( ( props ) => {
+  const filesHandle = Meteor.subscribe('files.all');
+  const docsReadyYet = filesHandle.ready();
+  const files = UserFiles.find({}, {sort: {name: 1}}).fetch();
+
   return {
-    tasks: Tasks.find({}).fetch(),
+    docsReadyYet,
+    files,
   };
 })(App);
